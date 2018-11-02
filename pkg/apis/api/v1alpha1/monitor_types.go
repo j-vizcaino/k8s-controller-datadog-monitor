@@ -25,7 +25,6 @@ func (in *MonitorSpec) Checksum() string {
 type MonitorState string
 
 const (
-	MonitorStatePending = "pending"
 	MonitorStateCreated = "created"
 	MonitorStateDeleted = "deleted"
 	MonitorStateError   = "error"
@@ -35,9 +34,10 @@ const (
 type MonitorStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	State               MonitorState
-	MonitorID           int
-	LastAppliedChecksum string
+	State               MonitorState `json:"state"`
+	MonitorID           int          `json:"ID"`
+	LastAppliedChecksum string       `json:"lastAppliedChecksum"`
+	ErrorMessage        string       `json:"errorMessage"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

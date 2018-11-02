@@ -3,9 +3,10 @@ package monitor
 import (
 	"context"
 	"fmt"
+	"github.com/go-logr/logr"
+	"github.com/j-vizcaino/k8s-controller-datadog-monitor/pkg/datadog-client"
+	log2 "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"time"
-
-	"go.uber.org/zap"
 
 	apiv1alpha1 "github.com/j-vizcaino/k8s-controller-datadog-monitor/pkg/apis/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -31,12 +32,17 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileMonitor{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return &ReconcileMonitor{
+		client: mgr.GetClient(),
+		scheme: mgr.GetScheme(),
+		log: log2.ZapLogger(true).WithName("monitor-controller"),
+	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
+	mgr.GetScheme().AddTypeDefaultingFunc(nil, nil)
 	c, err := controller.New("monitor-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
@@ -54,7 +60,7 @@ type ReconcileMonitor struct {
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
 	scheme *runtime.Scheme
-	log    *zap.SugaredLogger
+	log    logr.Logger
 }
 
 const (
@@ -71,7 +77,7 @@ var nextMonitorID = 1
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileMonitor) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	res := reconcile.Result{}
-	r.log = zap.S().With("name", fmt.Sprintf("%s/%s", request.Namespace, request.Name))
+	log := r.log.WithValues("name", fmt.Sprintf("%s/%s", request.Namespace, request.Name))
 
 	// Fetch the Monitor monitor
 	monitor := &apiv1alpha1.Monitor{}
@@ -81,11 +87,11 @@ func (r *ReconcileMonitor) Reconcile(request reconcile.Request) (reconcile.Resul
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			r.log.Info("Resource not found")
+			log.Info("Resource not found")
 			return res, nil
 		}
 		// Error reading the object - requeue the request.
-		r.log.Error(err, "resource get failed")
+		log.Error(err, "resource get failed")
 		return res, err
 	}
 
@@ -93,28 +99,28 @@ func (r *ReconcileMonitor) Reconcile(request reconcile.Request) (reconcile.Resul
 
 	// Monitor is already deleted, will be garbage collected later
 	case monitor.Status.State == apiv1alpha1.MonitorStateDeleted:
-		r.log.Infow("Monitor is already deleted","id", monitor.Status.MonitorID)
+		log.Info("Monitor is already deleted","id", monitor.Status.MonitorID)
 		return res, nil
 
 	// Monitor needs to be deleted
 	case monitor.DeletionTimestamp != nil:
-		r.log.Infow("Deleting monitor", "id", monitor.Status.MonitorID)
-		res, err = r.deleteMonitor(monitor)
+		log.Info("Deleting monitor", "id", monitor.Status.MonitorID)
+		res, err = r.deleteMonitor(monitor, log)
 
 	// Monitor needs to be checked/updated
 	case monitor.Status.State == apiv1alpha1.MonitorStateCreated:
-		res, err = r.updateMonitor(monitor)
+		res, err = r.updateMonitor(monitor, log)
 
 	// New monitor
 	default:
-		res, err = r.createMonitor(monitor)
+		res, err = r.createMonitor(monitor, log)
 	}
 
 	return res, err
 }
 
-func (r *ReconcileMonitor) updateMonitor(monitor *apiv1alpha1.Monitor) (reconcile.Result, error) {
-	log := r.log.With("id", monitor.Status.MonitorID)
+func (r *ReconcileMonitor) updateMonitor(monitor *apiv1alpha1.Monitor, log logr.Logger) (reconcile.Result, error) {
+	log = log.WithValues("id", monitor.Status.MonitorID)
 	newChecksum := monitor.Spec.Checksum()
 	if monitor.Status.LastAppliedChecksum == newChecksum {
 		log.Info("Monitor content did not change, not updating")
@@ -125,30 +131,47 @@ func (r *ReconcileMonitor) updateMonitor(monitor *apiv1alpha1.Monitor) (reconcil
 	m.Status.LastAppliedChecksum = newChecksum
 	err := r.client.Update(context.TODO(), m)
 	if err != nil {
-		log.Warnw("Error updating monitor object", "err", err)
+		log.Error(err, "Failed to update monitor object")
 	} else {
-		log.Infow("Monitor updated", "checksum", newChecksum)
+		log.Info("Monitor updated", "checksum", newChecksum)
 	}
 	return reconcile.Result{}, err
 }
 
-func (r *ReconcileMonitor) createMonitor(monitor *apiv1alpha1.Monitor) (reconcile.Result, error) {
+func (r *ReconcileMonitor) createMonitor(monitor *apiv1alpha1.Monitor, log logr.Logger) (reconcile.Result, error) {
 	m := monitor.DeepCopy()
-	m.Finalizers = append(m.Finalizers, FinalizerName)
-	m.Status.MonitorID = nextMonitorID
-	nextMonitorID += 1
-	m.Status.State = apiv1alpha1.MonitorStateCreated
-	m.Status.LastAppliedChecksum = m.Spec.Checksum()
+	c, ok := datadog_client.Registry[monitor.Spec.TargetSite]
+	if !ok {
+		m.Status = apiv1alpha1.MonitorStatus{
+			State: apiv1alpha1.MonitorStateError,
+			ErrorMessage: fmt.Sprintf("site '%s' not supported by controller", monitor.Spec.TargetSite),
+		}
+	} else {
+		res, err := c.Post(context.TODO(), "/api/v1/monitor", monitor.Spec.Data)
+		if err != nil {
+			m.Status = apiv1alpha1.MonitorStatus{
+				State: apiv1alpha1.MonitorStateError,
+				ErrorMessage: err.Error(),
+			}
+		} else {
+			m.Finalizers = append(m.Finalizers, FinalizerName)
+			m.Status = apiv1alpha1.MonitorStatus{
+				State: apiv1alpha1.MonitorStateCreated,
+				MonitorID: int(res["id"].(float64)),
+				LastAppliedChecksum: monitor.Spec.Checksum(),
+			}
+		}
+	}
 
 	err := r.client.Update(context.TODO(), m)
 	if err == nil {
-		r.log.Infow("Monitor created", "id", m.Status.MonitorID)
+		log.Info("Monitor status updated", "id", m.Status.MonitorID)
 	}
 	return reconcile.Result{}, err
 }
 
-func (r *ReconcileMonitor) deleteMonitor(monitor *apiv1alpha1.Monitor) (reconcile.Result, error) {
-	log := r.log.With("id", monitor.Status.MonitorID)
+func (r *ReconcileMonitor) deleteMonitor(monitor *apiv1alpha1.Monitor, log logr.Logger) (reconcile.Result, error) {
+	log = log.WithValues("id", monitor.Status.MonitorID)
 	m := monitor.DeepCopy()
 
 	found := false
@@ -161,7 +184,7 @@ func (r *ReconcileMonitor) deleteMonitor(monitor *apiv1alpha1.Monitor) (reconcil
 	}
 
 	if !found {
-		log.Warnw("Missing identifier from finalizers","finalizers", monitor.Finalizers)
+		log.Info("Missing identifier from finalizers","finalizers", monitor.Finalizers)
 		return reconcile.Result{}, nil
 	}
 	log.Info("Removed identifier from finalizers")

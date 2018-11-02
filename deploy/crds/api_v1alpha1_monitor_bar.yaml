@@ -3,7 +3,7 @@ kind: Monitor
 metadata:
   name: bar
 spec:
-  targetSite: datadoghq.com
+  targetSite: api.datadoghq.com
   data: |
     {
       "type": "metric alert",
