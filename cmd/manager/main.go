@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"log"
+	"go.uber.org/zap"
 	"runtime"
 
 	"github.com/j-vizcaino/k8s-controller-datadog-monitor/pkg/apis"
@@ -16,18 +16,22 @@ import (
 )
 
 func printVersion() {
-	log.Printf("Go Version: %s", runtime.Version())
-	log.Printf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
-	log.Printf("operator-sdk Version: %v", sdkVersion.Version)
+	log := zap.S()
+	log.Infow("Monitor controller", "go_version", runtime.Version(), "operator_sdk", sdkVersion.Version)
 }
 
 func main() {
+	logger, _ := zap.NewDevelopment()
+	defer logger.Sync()
+	zap.ReplaceGlobals(logger)
+	log := logger.Sugar()
+
 	printVersion()
 	flag.Parse()
 
 	namespace, err := k8sutil.GetWatchNamespace()
 	if err != nil {
-		log.Fatalf("failed to get watch namespace: %v", err)
+		log.Fatal("failed to get watch namespace", "err", err)
 	}
 
 	// TODO: Expose metrics port after SDK uses controller-runtime's dynamic client
@@ -45,7 +49,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Print("Registering Components.")
+	log.Info("Registering Components.")
 
 	// Setup Scheme for all resources
 	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
@@ -57,7 +61,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Print("Starting the Cmd.")
+	log.Info("Starting the Cmd.")
 
 	// Start the Cmd
 	log.Fatal(mgr.Start(signals.SetupSignalHandler()))
