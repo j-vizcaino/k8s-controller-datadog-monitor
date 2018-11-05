@@ -28,6 +28,7 @@ const (
 	MonitorStateCreated = "created"
 	MonitorStateDeleted = "deleted"
 	MonitorStateError   = "error"
+	MonitorStateUnknown = "unknown"
 )
 
 // MonitorStatus defines the observed state of Monitor
@@ -37,6 +38,7 @@ type MonitorStatus struct {
 	State               MonitorState `json:"state"`
 	MonitorID           int          `json:"ID"`
 	LastAppliedChecksum string       `json:"lastAppliedChecksum"`
+	LastModified        string       `json:"lastModified"`
 	ErrorMessage        string       `json:"errorMessage"`
 }
 

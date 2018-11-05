@@ -4,9 +4,12 @@ import (
 	"context"
 )
 
-type Result map[string]interface{}
+type Result struct {
+	Status int
+	Data   map[string]interface{}
+}
 
 type Client interface {
 	Host() string
-	Post(ctx context.Context, resourcePath string, data string) (Result, error)
+	Request(ctx context.Context, method string, resourcePath string, data string) (Result, error)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -51,10 +52,12 @@ func (c *client) Host() string {
 	return c.baseURL.Host
 }
 
-func (c *client) Post(ctx context.Context, resourcePath string, data string) (result Result, err error) {
-	r := strings.NewReader(data)
-
-	req, err := http.NewRequest(http.MethodPost, c.resourceURL(resourcePath), r)
+func (c *client) Request(ctx context.Context, method string, resourcePath string, data string) (result Result, err error) {
+	var r io.Reader
+	if len(data) > 0 {
+		r = strings.NewReader(data)
+	}
+	req, err := http.NewRequest(method, c.resourceURL(resourcePath), r)
 	if err != nil {
 		return
 	}
@@ -67,12 +70,12 @@ func (c *client) Post(ctx context.Context, resourcePath string, data string) (re
 	}
 	defer res.Body.Close()
 
+	result.Status = res.StatusCode
 	if res.StatusCode != http.StatusOK {
-		err = fmt.Errorf("server returned %s", res.Status)
 		return
 	}
 
 	decoder := json.NewDecoder(res.Body)
-	err = decoder.Decode(&result)
+	err = decoder.Decode(&result.Data)
 	return
 }
