@@ -20,11 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
-
 // Add creates a new Monitor Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
@@ -66,7 +61,6 @@ type ReconcileMonitor struct {
 
 const (
 	ReconcileLoopPeriod = 10 * time.Second
-	FinalizerName       = "api.datadoghq.com"
 	ErrorMessageSiteNotSupported = "Datadog site %s is not supported by controller"
 )
 
@@ -205,7 +199,7 @@ func (r *ReconcileMonitor) createMonitor(monitor *apiv1alpha1.Monitor, log logr.
 		}
 		log.Error(err, "Failed to create Datadog monitor")
 	} else {
-		m.Finalizers = append(m.Finalizers, FinalizerName)
+		m.Finalizers = addFinalizer(monitor.Finalizers)
 		m.Status = apiv1alpha1.MonitorStatus{
 			State: apiv1alpha1.MonitorStateCreated,
 			MonitorID: int(res.Data["id"].(float64)),
@@ -230,17 +224,9 @@ func (r *ReconcileMonitor) deleteMonitor(monitor *apiv1alpha1.Monitor, log logr.
 		return reconcile.Result{}, err
 	}
 
-	m := monitor.DeepCopy()
-	found := false
-	for idx, f := range monitor.Finalizers {
-		if f == FinalizerName {
-			found = true
-			m.Finalizers = append(m.Finalizers[:idx], m.Finalizers[idx+1:]...)
-			break
-		}
-	}
+	finalizers, foundFinalizer := removeFinalizer(monitor.Finalizers)
 
-	if !found && monitor.Status.State == apiv1alpha1.MonitorStateCreated {
+	if !foundFinalizer && monitor.Status.State == apiv1alpha1.MonitorStateCreated {
 		log.Info("BUG! Missing identifier from finalizers but monitor state is created","finalizers", monitor.Finalizers)
 		return reconcile.Result{}, nil
 	}
@@ -256,6 +242,9 @@ func (r *ReconcileMonitor) deleteMonitor(monitor *apiv1alpha1.Monitor, log logr.
 		log.Error(err,"Failed to delete monitor")
 		return reconcile.Result{}, err
 	}
+
+	m := monitor.DeepCopy()
+	m.Finalizers = finalizers
 	m.Status = apiv1alpha1.MonitorStatus{
 		State: apiv1alpha1.MonitorStateDeleted,
 	}
