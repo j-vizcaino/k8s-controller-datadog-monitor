@@ -9,7 +9,7 @@ all: test manager
 
 # Run tests
 test: generate fmt vet manifests
-	go test ./pkg/... ./cmd/... -coverprofile cover.out
+	TEST_ASSET_ETCD=$(TEST_ASSET_ETCD) TEST_ASSET_KUBE_APISERVER=$(TEST_ASSET_KUBE_APISERVER) go test ./pkg/... ./cmd/... -coverprofile cover.out
 
 # Build manager binary
 manager: generate fmt vet
