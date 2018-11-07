@@ -42,17 +42,27 @@ spec:
     spec:
       containers:
       - command:
-        - /root/manager
+        - /usr/local/bin/manager
         image: controller:latest
         imagePullPolicy: Always
         name: manager
         env:
-          - name: POD_NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.namespace
-          - name: SECRET_NAME
-            value: $(WEBHOOK_SECRET_NAME)
+        - name: DD_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: datadog-secret
+              key: api_key
+        - name: DD_APP_KEY
+          valueFrom:
+            secretKeyRef:
+              name: datadog-secret
+              key: app_key
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: SECRET_NAME
+          value: $(WEBHOOK_SECRET_NAME)
         resources:
           limits:
             cpu: 100m

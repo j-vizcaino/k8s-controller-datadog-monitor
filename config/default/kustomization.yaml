@@ -12,6 +12,13 @@ namePrefix: k8s-controller-datadog-monitor-
 #commonLabels:
 #  someName: someValue
 
+secretGenerator:
+- name: datadog-secret
+  commands:
+    api_key: "cat secret/api.key"
+    app_key: "cat secret/app.key"
+  type: Opaque
+
 # Each entry in this list must resolve to an existing
 # resource definition in YAML.  These are the resource
 # files that kustomize reads, modifies and emits as a
