@@ -1,0 +1,59 @@
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: monitors.monitors.datadoghq.com
+spec:
+  group: monitors.datadoghq.com
+  names:
+    kind: Monitor
+    plural: monitors
+  scope: Namespaced
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          type: string
+        kind:
+          type: string
+        metadata:
+          type: object
+        spec:
+          properties:
+            data:
+              type: string
+            targetSite:
+              type: string
+          required:
+          - targetSite
+          - data
+          type: object
+        status:
+          properties:
+            ID:
+              format: int64
+              type: integer
+            errorMessage:
+              type: string
+            lastAppliedChecksum:
+              type: string
+            lastModified:
+              type: string
+            state:
+              type: string
+          required:
+          - state
+          - ID
+          - lastAppliedChecksum
+          - lastModified
+          - errorMessage
+          type: object
+  version: v1alpha1
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

@@ -1,0 +1,3 @@
+version: "1"
+domain: datadoghq.com
+repo: github.com/j-vizcaino/k8s-controller-datadog-monitor

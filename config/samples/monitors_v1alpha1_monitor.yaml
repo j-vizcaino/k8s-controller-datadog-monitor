@@ -1,0 +1,9 @@
+apiVersion: monitors.datadoghq.com/v1alpha1
+kind: Monitor
+metadata:
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: monitor-sample
+spec:
+  # Add fields here
+  foo: bar
