@@ -19,6 +19,7 @@ package main
 import (
 	"github.com/j-vizcaino/k8s-controller-datadog-monitor/pkg/datadog-client"
 	"os"
+	"time"
 
 	"github.com/j-vizcaino/k8s-controller-datadog-monitor/pkg/apis"
 	"github.com/j-vizcaino/k8s-controller-datadog-monitor/pkg/controller"
@@ -43,6 +44,8 @@ func addDatadogClient() error {
 	return nil
 }
 
+var FullResyncPeriod = 30 * time.Second
+
 func main() {
 	logf.SetLogger(logf.ZapLogger(true))
 	log := logf.Log.WithName("entrypoint")
@@ -57,7 +60,7 @@ func main() {
 
 	// Create a new Cmd to provide shared dependencies and start components
 	log.Info("setting up manager")
-	mgr, err := manager.New(cfg, manager.Options{})
+	mgr, err := manager.New(cfg, manager.Options{SyncPeriod: &FullResyncPeriod})
 	if err != nil {
 		log.Error(err, "unable to set up overall controller manager")
 		os.Exit(1)
