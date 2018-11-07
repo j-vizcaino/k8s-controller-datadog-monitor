@@ -11,7 +11,13 @@ COPY vendor/ vendor/
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager github.com/j-vizcaino/k8s-controller-datadog-monitor/cmd/manager
 
 # Copy the controller-manager into a thin image
-FROM ubuntu:latest
-WORKDIR /root/
+FROM alpine:3.7
+
+RUN apk update && apk add ca-certificates
+
+WORKDIR /usr/local/bin
 COPY --from=builder /go/src/github.com/j-vizcaino/k8s-controller-datadog-monitor/manager .
+
+USER nobody
+
 ENTRYPOINT ["./manager"]
